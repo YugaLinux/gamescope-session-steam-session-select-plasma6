@@ -1,0 +1,8 @@
+#!/usr/bin/xdg-open
+[Desktop Entry]
+Name=Game Mode
+Exec=/usr/libexec/gamescope-session-steam/system-session-select
+Icon=/usr/share/icons/gamescope-session-steam/scalable/actions/return-to-game-mode.svg
+Terminal=false
+Type=Application
+StartupNotify=false

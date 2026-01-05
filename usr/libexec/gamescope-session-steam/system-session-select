@@ -1,0 +1,90 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+die() { echo "!! $*" >&2; exit 1; }
+
+is_kwin_running()   { pgrep -f kwin   >/dev/null 2>&1 || return 1; }
+is_gamescope_steam_running() { systemctl --user is-active --quiet gamescope-session-plus@steam.service; }
+
+ensure_dir() { mkdir -p "$1"; }
+
+LOCKFILE="/tmp/$(basename "$0").$UID.lock"
+
+# sentinel
+SENTINEL_FILE="steamos-session-select"
+
+session="${1:-gamescope}"
+
+# user used for autologin
+TARGET_USER="${3:-${USER:-}}"
+
+if [[ "${2:-}" != "--root" ]]; then
+  [[ $EUID -eq 0 ]] && die "Run this script as your user, not root."
+  [[ -n ${HOME:-} ]] || die "\$HOME not set"
+
+  # Update config sentinel like the newer script
+  config_dir="${XDG_CONF_DIR:-"$HOME/.config"}"
+  ensure_dir "$config_dir"
+  (
+    cd "$config_dir"
+    if [[ -f "steamos-session-type" ]]; then
+      cp "steamos-session-type" "$SENTINEL_FILE"
+    else
+      echo "wayland" > "$SENTINEL_FILE"
+    fi
+  ) >/dev/null 2>&1 || true
+
+  # clear steam game desktop shortcut clutter
+  DATA_HOME=${XDG_DATA_HOME:-"$HOME/.local/share"}
+  if [[ -d "$DATA_HOME/applications" ]]; then
+    grep -r --files-with-matches "Exec=steam steam://rungameid/" "$DATA_HOME/applications/" \
+      | tr '\n' '\0' | xargs -0 -r rm -- || true
+  fi
+
+  # Ask the current compositor/session to log out
+  is_kwin_running   && qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout || true
+  is_gamescope_steam_running && steam -shutdown || true
+
+  # Re-run as root to update DM config
+  exec pkexec "$(realpath "$0")" "$session" --root "$USER"
+  exit 0
+fi
+
+[[ $EUID -eq 0 ]] || die "Internal error: root phase not running as root."
+[[ -n ${TARGET_USER:-} ]] || die "No target user provided."
+
+# locking
+cleanup() { rm -f "$LOCKFILE"; }
+exec 200>"$LOCKFILE"
+flock -n 200 || die "Another instance is already running."
+trap cleanup EXIT INT TERM HUP
+
+session_launcher=""
+case "$session" in
+  gamescope)
+    session_launcher="gamescope-session-steam"
+    ;;
+  desktop|plasma|plasma-wayland-persistent|plasma-x11-persistent)
+    session_launcher="plasmawayland"
+    ;;
+  *)
+    die "Unrecognised session '$session'"
+    ;;
+esac
+
+echo "Selected session launcher: $session_launcher"
+echo "Autologin user: $TARGET_USER"
+
+if [[ -f /etc/sysconfig/displaymanager ]]; then
+  sed -i "s|DISPLAYMANAGER_AUTOLOGIN=.*|DISPLAYMANAGER_AUTOLOGIN=\"$TARGET_USER\"|g" /etc/sysconfig/displaymanager
+fi
+
+if [[ -f /etc/sddm.conf.d/kde_settings.conf ]]; then
+  sed -i "s|Session=.*|Session=$session_launcher|g" /etc/sddm.conf.d/kde_settings.conf
+  sed -i "s|Relogin=.*|Relogin=true|g" /etc/sddm.conf.d/kde_settings.conf
+  if [[ -z $(grep -F "Relogin" /etc/sddm.conf.d/kde_settings.conf) ]]; then
+    sed -i '/\[Autologin\]/a\Relogin=true' /etc/sddm.conf.d/kde_settings.conf
+  fi
+fi
+
+echo "Done. Session set to '$session_launcher' for '$TARGET_USER'."

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if [ -e "/home/tik/.config/autostart/org.opensuse.tik.desktop" ]; then
+  # We are in the installer
+  exit 0
+fi
+
+if [[ -f /etc/sddm.conf.d/kde_settings.conf ]]; then
+  sed -i "s|Session=.*|Session=gamescope-session-steam|g" /etc/sddm.conf.d/kde_settings.conf
+  sed -i "s|Relogin=.*|Relogin=true|g" /etc/sddm.conf.d/kde_settings.conf
+  if [[ -z $(grep -F "Relogin" /etc/sddm.conf.d/kde_settings.conf) ]]; then
+    sed -i '/\[Autologin\]/a\Relogin=true' /etc/sddm.conf.d/kde_settings.conf
+  fi
+fi

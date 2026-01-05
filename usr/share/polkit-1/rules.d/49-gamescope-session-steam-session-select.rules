@@ -1,0 +1,5 @@
+polkit.addRule(function(action, subject) {
+	if (action.id == "org.gamescope-session-steam-session-select.pkexec.run-session-select" && subject.isInGroup("wheel")) {
+		return polkit.Result.YES;
+	}
+});
