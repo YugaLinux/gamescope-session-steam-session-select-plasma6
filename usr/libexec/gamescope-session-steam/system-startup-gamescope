@@ -5,6 +5,10 @@ if [ -e "/home/tik/.config/autostart/org.opensuse.tik.desktop" ]; then
   exit 0
 fi
 
+if [[ -f /etc/sysconfig/displaymanager ]]; then
+  sed -i "s|DISPLAYMANAGER_AUTOLOGIN=.*|DISPLAYMANAGER_AUTOLOGIN=\"deck\"|g" /etc/sysconfig/displaymanager
+fi
+
 if [[ -f /etc/sddm.conf.d/kde_settings.conf ]]; then
   sed -i "s|Session=.*|Session=gamescope-session-steam|g" /etc/sddm.conf.d/kde_settings.conf
   sed -i "s|Relogin=.*|Relogin=true|g" /etc/sddm.conf.d/kde_settings.conf
