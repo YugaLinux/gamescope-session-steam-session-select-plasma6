@@ -8,8 +8,6 @@ is_gamescope_steam_running() { systemctl --user is-active --quiet gamescope-sess
 
 ensure_dir() { mkdir -p "$1"; }
 
-LOCKFILE="/tmp/$(basename "$0").$UID.lock"
-
 # sentinel
 SENTINEL_FILE="steamos-session-select"
 
@@ -41,23 +39,18 @@ if [[ "${2:-}" != "--root" ]]; then
       | tr '\n' '\0' | xargs -0 -r rm -- || true
   fi
 
+  # Re-run as root to update DM config
+  pkexec "$(realpath "$0")" "$session" --root "$USER"
+
   # Ask the current compositor/session to log out
   is_kwin_running   && qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout || true
   is_gamescope_steam_running && steam -shutdown || true
 
-  # Re-run as root to update DM config
-  exec pkexec "$(realpath "$0")" "$session" --root "$USER"
   exit 0
 fi
 
 [[ $EUID -eq 0 ]] || die "Internal error: root phase not running as root."
 [[ -n ${TARGET_USER:-} ]] || die "No target user provided."
-
-# locking
-cleanup() { rm -f "$LOCKFILE"; }
-exec 200>"$LOCKFILE"
-flock -n 200 || die "Another instance is already running."
-trap cleanup EXIT INT TERM HUP
 
 session_launcher=""
 case "$session" in
